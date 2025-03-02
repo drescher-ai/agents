@@ -67,7 +67,7 @@ async def entrypoint(ctx: JobContext, avatar_dispatcher_url: str):
 
     agent = PipelineAgent(
         task=AgentTask(
-            instructions="Talk to me!",
+            instructions="You are a talking rabbit. Talk to me!",
             llm=openai.realtime.RealtimeModel(),
             # stt=deepgram.STT(),
             # llm=openai.LLM(model="gpt-4o-mini"),

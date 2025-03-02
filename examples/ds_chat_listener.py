@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from itertools import cycle
 from typing import Dict, Optional
 
+from dotenv import load_dotenv
 from livekit import api, rtc
+
+load_dotenv()
 
 tasks = set()
 

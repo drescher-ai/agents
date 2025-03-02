@@ -85,10 +85,12 @@ class MyVideoGenerator:
         await self.runtime.stop()
 
 
-async def main(room: rtc.Room, avatar_model: str, bithuman_token: str):
+async def main(url: str, token: str, avatar_model: str, bithuman_token: str):
     """Main application logic for the avatar worker"""
     runner: AvatarRunner | None = None
     stop_event = asyncio.Event()
+
+    room = rtc.Room()
 
     try:
         # Initialize and start worker
@@ -102,6 +104,8 @@ async def main(room: rtc.Room, avatar_model: str, bithuman_token: str):
             audio_channels=1,
         )
         logger.info("Media options: %s", media_options)
+
+        await room.connect(url, token)
         runner = AvatarRunner(room, video_generator=video_generator, media_options=media_options)
         await runner.start()
 
@@ -123,29 +127,15 @@ async def main(room: rtc.Room, avatar_model: str, bithuman_token: str):
         # Wait until stopped
         await stop_event.wait()
 
+    except rtc.ConnectError as e:
+        logging.error("Failed to connect to room: %s", e)
+        raise
     except Exception as e:
         logging.error("Unexpected error: %s", e)
         raise
     finally:
         if runner:
             await runner.aclose()
-
-
-async def run_service(url: str, token: str, avatar_model: str, bithuman_token: str):
-    """Run the avatar worker service"""
-    room = rtc.Room()
-    try:
-        # Connect to LiveKit room
-        logging.info("Connecting to %s", url)
-        await room.connect(url, token)
-        logging.info("Connected to room %s", room.name)
-
-        # Run main application logic
-        await main(room, avatar_model, bithuman_token)
-    except rtc.ConnectError as e:
-        logging.error("Failed to connect to room: %s", e)
-        raise
-    finally:
         await room.disconnect()
 
 
@@ -186,9 +176,11 @@ if __name__ == "__main__":
         logging.basicConfig(level=getattr(logging, level.upper()), format=log_format)
 
     args = parse_args()
+    assert args.avatar_model is not None
+    assert args.bithuman_token is not None
     setup_logging(args.room, args.log_level)
     try:
-        asyncio.run(run_service(args.url, args.token, args.avatar_model, args.bithuman_token))
+        asyncio.run(main(args.url, args.token, args.avatar_model, args.bithuman_token))
     except KeyboardInterrupt:
         logging.info("Received interrupt signal, shutting down...")
     except Exception as e:
