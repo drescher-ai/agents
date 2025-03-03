@@ -1,5 +1,13 @@
 # livekit-agents
 
+## 0.12.17
+
+### Patch Changes
+
+- use streaming AudioDecoder to handle compressed encoding - [#1584](https://github.com/livekit/agents/pull/1584) ([@davidzhao](https://github.com/davidzhao))
+
+- fix: \_play_speech get stuck due to orphan speech handle - [#1555](https://github.com/livekit/agents/pull/1555) ([@SiyuanQi](https://github.com/SiyuanQi))
+
 ## 0.12.16
 
 ### Patch Changes
