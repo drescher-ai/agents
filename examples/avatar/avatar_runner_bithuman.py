@@ -7,7 +7,8 @@ from typing import AsyncIterator, Optional
 
 import cv2
 import numpy as np
-from bithuman_runtime import AsyncBithumanRuntime, BithumanRuntime
+from bithuman_runtime import AsyncBithumanRuntime
+
 from livekit import rtc
 from livekit.agents import utils
 from livekit.agents.pipeline.avatar import AvatarRunner, MediaOptions
@@ -20,35 +21,37 @@ logger = logging.getLogger("avatar-example")
 
 class MyVideoGenerator:
     def __init__(self, avatar_model: str, token: str):
-        _runtime = BithumanRuntime(token=token)
-        _runtime.set_avatar_model(avatar_model)
+        self._runtime = AsyncBithumanRuntime(token=token)
+        self._avatar_model = avatar_model
 
-        self.runtime = AsyncBithumanRuntime(_runtime)
+    async def start(self) -> None:
+        await self._runtime.set_avatar_model(self._avatar_model)
+        await self._runtime.start()
 
     @property
     def video_resolution(self) -> tuple[int, int]:
-        frame = self.runtime._runtime.get_first_frame()
+        frame = self._runtime.get_first_frame()
         if frame is None:
             raise ValueError("No frame found")
         return frame.shape[1], frame.shape[0]
 
     @property
     def video_fps(self) -> int:
-        return self.runtime._runtime.settings.FPS
+        return self._runtime.settings.FPS
 
     @property
     def audio_sample_rate(self) -> int:
-        return self.runtime._runtime.settings.INPUT_SAMPLE_RATE
+        return self._runtime.settings.INPUT_SAMPLE_RATE
 
     @utils.log_exceptions(logger=logger)
     async def push_audio(self, frame: rtc.AudioFrame | AudioFlushSentinel) -> None:
         if isinstance(frame, AudioFlushSentinel):
-            await self.runtime.flush()
+            await self._runtime.flush()
             return
-        await self.runtime.push_audio(bytes(frame.data), frame.sample_rate, last_chunk=False)
+        await self._runtime.push_audio(bytes(frame.data), frame.sample_rate, last_chunk=False)
 
     def clear_buffer(self) -> None:
-        self.runtime.clear_buffer()
+        self._runtime.interrupt()
 
     async def stream(
         self,
@@ -62,7 +65,7 @@ class MyVideoGenerator:
                 data=image.tobytes(),
             )
 
-        async for frame in self.runtime.stream():
+        async for frame in self._runtime.run():
             video_frame: rtc.VideoFrame | None = None
             if frame.bgr_image is not None:
                 video_frame = create_video_frame(frame.bgr_image)
@@ -82,7 +85,7 @@ class MyVideoGenerator:
                 yield AudioFlushSentinel()
 
     async def stop(self) -> None:
-        await self.runtime.stop()
+        await self._runtime.stop()
 
 
 async def main(url: str, token: str, avatar_model: str, bithuman_token: str):
@@ -94,7 +97,10 @@ async def main(url: str, token: str, avatar_model: str, bithuman_token: str):
 
     try:
         # Initialize and start worker
+        assert avatar_model and bithuman_token
         video_generator = MyVideoGenerator(avatar_model, bithuman_token)
+        await video_generator.start()
+
         output_width, output_height = video_generator.video_resolution
         media_options = MediaOptions(
             video_width=output_width,
@@ -131,7 +137,7 @@ async def main(url: str, token: str, avatar_model: str, bithuman_token: str):
         logging.error("Failed to connect to room: %s", e)
         raise
     except Exception as e:
-        logging.error("Unexpected error: %s", e)
+        logging.exception("Unexpected error: %s", e)
         raise
     finally:
         if runner:
