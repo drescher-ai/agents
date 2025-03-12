@@ -1297,7 +1297,6 @@ class VoicePipelineAgent(utils.EventEmitter[EventTypes]):
                 continue  # ignora outros tipos de resposta
             
             chunk_interrupt_id = chunk.get("interrupt_id")
-            logger.warning(f"Recebida interrupt: {chunk}")
             # Se não há interrupção em curso ou o novo chunk possui id maior (nova mensagem):
             if self._current_interrupt_id is None or chunk_interrupt_id > self._current_interrupt_id:
                 
@@ -1313,7 +1312,6 @@ class VoicePipelineAgent(utils.EventEmitter[EventTypes]):
 
                 ##############
                 # Cancela sínteses atuais e limpa a fila
-                logger.info("Cancelando sínteses atuais e limpando fila")
                 self.interrupt(interrupt_all=True)
                 # self._speech_q.clear()
                 # self._pending_agent_reply = None
@@ -1328,21 +1326,33 @@ class VoicePipelineAgent(utils.EventEmitter[EventTypes]):
                         data = await q.get()
                         if data is None:
                             break
-                        # logger.critical(f"Proactive stream: {data}")
                         yield data
 
                 stream = proactive_stream_gen(new_queue)
 
                 # Define allow_interruptions com base no flag no_interruption_allowed
-                allow_intr = not chunk.get("no_interruption_allowed", False)
+                allow_intr = not chunk.get("no_interruption_allowed", False)   
+
                 proactive_handle = SpeechHandle.create_assistant_speech(
                     allow_interruptions=allow_intr, add_to_chat_ctx=True
                 )
                 synthesis_handle = self._synthesize_agent_speech(proactive_handle.id, stream)
                 proactive_handle.initialize(source=stream, synthesis_handle=synthesis_handle)
+              
+
+                if self._playing_speech and not self._playing_speech.nested_speech_done:
+                    self._playing_speech.add_nested_speech(proactive_handle)
+                elif self._speech_q:
+                    self._speech_q[0].add_nested_speech(proactive_handle)
+                else:
+                    self._add_speech_for_playout(proactive_handle)
+
+
+                # synthesis_handle = self._synthesize_agent_speech(proactive_handle.id, stream)
+                # proactive_handle.initialize(source=stream, synthesis_handle=synthesis_handle)
                 # Insere o novo speech no início da fila (prioridade máxima)
-                self._speech_q.insert(0, proactive_handle)
-                self._speech_q_changed.set()
+                # self._speech_q.insert(0, proactive_handle)
+                # self._speech_q_changed.set()
                 # Armazena o estado atual da interrupção
                 self._current_interrupt_id = chunk_interrupt_id
                 self._current_interrupt_queue = new_queue
